@@ -1,2 +1,2 @@
-from app.models.Base import Base
-from app.models.User import User
+# app/models/__init__.py
+from app.models.user import User     
