@@ -5,13 +5,15 @@ from app.core.db import get_db
 from app.core.security import get_current_user_id
 from app.services.auth_service import register_user, login_user, get_me
 from app.schemas.auth import LoginRequest,RegisterRequest
+from app.core.limiter import limiter
+
 auth_router = APIRouter()
 
 
 
 # ── Routes ────────────────────────────────────────────────────
 @auth_router.post("/register", status_code=201,response_model=ApiResponse)
-
+@limiter.limit("3/minute")  
 async def register(
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -20,6 +22,7 @@ async def register(
 
 
 @auth_router.post("/login",response_model=ApiResponse)
+@limiter.limit("5/minute")
 async def login(
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
@@ -28,6 +31,7 @@ async def login(
 
 
 @auth_router.get("/me",response_model=ApiResponse)
+@limiter.limit("90/minute") 
 async def me(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),

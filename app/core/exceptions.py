@@ -2,10 +2,13 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from app.schemas.response import ApiResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-
+    # ── rate limit exceeded → 429 ─────────────────────────────
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     # ── HTTPException (401, 403, 404, 400 etc) ───────────────
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
