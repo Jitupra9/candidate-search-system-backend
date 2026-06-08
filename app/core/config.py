@@ -39,5 +39,16 @@ class Settings(BaseSettings):
     AWS_BUCKET_NAME: str
     AWS_REGION: str = "ap-south-1"
 
+    OPENAI_API_KEY    : str = ""
+    ANTHROPIC_API_KEY : str = ""
+    GEMINI_API_KEY    : str = ""
+    GROQ_API_KEY      : str = ""
+    OLLAMA_BASE_URL   : str = "http://localhost:11434"
+    DEFAULT_MODEL     : str = "openai/gpt-4o"
+
+    # ChromaDB
+    CHROMA_HOST : str = "localhost"
+    CHROMA_PORT : int = 8000
+
 
 settings = Settings()

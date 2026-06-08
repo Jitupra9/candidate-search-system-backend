@@ -1,7 +1,7 @@
 
 from app.core.db import Base,UUIDPKMixin,TimestampMixin
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Integer
+from sqlalchemy import String
 
 class User(UUIDPKMixin, TimestampMixin,Base):
     __tablename__ = "users"

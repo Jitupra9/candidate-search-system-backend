@@ -12,7 +12,7 @@ auth_router = APIRouter()
 
 
 # ── Routes ────────────────────────────────────────────────────
-@auth_router.post("/register", status_code=201,response_model=ApiResponse)
+@auth_router.post("/register",response_model=ApiResponse)
 @limiter.limit("3/minute")  
 async def register(
     body: RegisterRequest,
