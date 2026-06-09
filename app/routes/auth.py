@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,Request
 from app.schemas.response import ApiResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
@@ -15,6 +15,7 @@ auth_router = APIRouter()
 @auth_router.post("/register",response_model=ApiResponse)
 @limiter.limit("3/minute")  
 async def register(
+    request: Request,
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -22,8 +23,9 @@ async def register(
 
 
 @auth_router.post("/login",response_model=ApiResponse)
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 async def login(
+    request: Request,
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -31,8 +33,9 @@ async def login(
 
 
 @auth_router.get("/me",response_model=ApiResponse)
-@limiter.limit("90/minute") 
+@limiter.limit("30/minute") 
 async def me(
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):

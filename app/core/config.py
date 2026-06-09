@@ -34,10 +34,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str
 
     # ── AWS S3 ────────────────────────────────────────────────
-    AWS_ACCESS_KEY_ID: str
-    AWS_SECRET_ACCESS_KEY: str
-    AWS_BUCKET_NAME: str
-    AWS_REGION: str = "ap-south-1"
+    AWS_ACCESS_KEY_ID: str = os.getenv('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY: str =os.getenv('AWS_SECRET_ACCESS_KEY')
+    AWS_REGION: str = os.getenv('AWS_REGION')
+    AWS_S3_BUCKET:str =os.getenv('AWS_S3_BUCKET')
 
     OPENAI_API_KEY    : str = ""
     ANTHROPIC_API_KEY : str = ""

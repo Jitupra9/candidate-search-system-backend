@@ -1,0 +1,14 @@
+Resume Upload
+      ↓
+Store in S3
+      ↓
+Download PDF
+      ↓
+1. Extract Text
+2. Send PDF to Vision LLM
+      ↓
+Merge Results
+      ↓
+Candidate Pydantic Model
+      ↓
+Database

@@ -19,13 +19,13 @@ class CandidateBase(BaseModel):
     expected_salary: Optional[str] = None
     notice_period: Optional[int] = None
     summary: Optional[str] = None
+    status:Optional[str] = None
 
 
 # ─── Insert (request) ────────────────────────────────────────────────────────
 
 class CandidateCreate(CandidateBase):
-    candidate_id: str
-    resume_file: Optional[str] = None
+    resume_file_url: Optional[str] = None
     uploaded_by: Optional[uuid.UUID] = None
 
 
@@ -37,7 +37,7 @@ class CandidateUpdate(BaseModel):
     processed_at: Optional[datetime] = None
     summary: Optional[str] = None
     skills: Optional[List[str]] = None
-    resume_file: Optional[str] = None
+    resume_file_url: Optional[str] = None
 
 
 # ─── Output (response) ───────────────────────────────────────────────────────
@@ -45,10 +45,11 @@ class CandidateUpdate(BaseModel):
 class CandidateOut(CandidateBase):
     id: uuid.UUID
     candidate_id: str
-    resume_file: Optional[str] = None
+    resume_file_url: Optional[str] = None
     status: CandidateStatus
     error_message: Optional[str] = None
     uploaded_by: Optional[uuid.UUID] = None
+    location:Optional[str] = None
     processed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
