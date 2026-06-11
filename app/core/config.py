@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str =os.getenv('AWS_SECRET_ACCESS_KEY')
     AWS_REGION: str = os.getenv('AWS_REGION')
     AWS_S3_BUCKET:str =os.getenv('AWS_S3_BUCKET')
+    MAX_FILE_SIZE_MB:int = 50
 
     OPENAI_API_KEY    : str = ""
     ANTHROPIC_API_KEY : str = ""

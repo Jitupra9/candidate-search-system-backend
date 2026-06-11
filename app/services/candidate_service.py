@@ -2,28 +2,41 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from app.models.candidates import Candidate
 from app.schemas.response import ApiResponse
 from app.schemas.candidate import CandidateCreate, CandidateOut
-from app.services.helper import unique_check
 from app.services.s3_processor import download_and_extract_text
 class CandidateService:
-    async def upload(db:AsyncSession,payload:CandidateCreate):
+    @staticmethod
+    async def upload(db: AsyncSession, payload: CandidateCreate):
         try:
-            if not payload :
-                raise HTTPException(status_code=400, detail="No file uploaded")
+            if not payload:
+                raise HTTPException(status_code=400, detail="No payload")
+
             if not payload.resume_file_url:
-                return ApiResponse.error(message="No document find")
-            document = download_and_extract_text(
-                payload.resume_file_url
-            )
+                return ApiResponse.error(message="resume_file_url is required")
+            document = await download_and_extract_text(payload.resume_file_url)
 
-            print("Pages:", document['page_count'])
-            print("Text Length:", document['content'])
+            return ApiResponse.success(data={
+                "file_name" : document["file_name"],
+                "page_count": document["page_count"],
+                "file_size" : document["file_size"],
+                "content"   : document["content"][:500],
+            })
 
-        except Exception as e :
-            return HTTPException(status_code=500,detail="failed to create candidate")
+        except HTTPException:
+            raise
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except PermissionError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
         
 
 
@@ -50,7 +63,7 @@ class CandidateService:
             result = db.execute(candidate)
             return ApiResponse.success(data = result.scalar_one_or_none(),message="data fetch successfully")
         except:
-            HTTPException(status_code=404,detail="candidate not find")
+            raise HTTPException(status_code=404,detail="candidate not find")
     async def delete(db:AsyncSession, candidate_id:str):
         try:
             candidate = select(Candidate).where(Candidate.id == candidate_id)
@@ -62,7 +75,7 @@ class CandidateService:
             db.commit()
             return ApiResponse.success(message="candidate remove successfully")
         except:
-            return HTTPException(status_code=404, detail="failed to remove candidate")
+            raise HTTPException(status_code=404, detail="failed to remove candidate")
         
     async def update(db:AsyncSession, candidate_id:str, payload:CandidateCreate):
         try:
@@ -78,4 +91,4 @@ class CandidateService:
             db.refresh(candidate)
             return ApiResponse.success(data=CandidateOut.model_validate(candidate), message="candidate updated successfully")
         except:
-            return HTTPException(status_code=500, detail="failed to update candidate")
+            raise HTTPException(status_code=500, detail="failed to update candidate")

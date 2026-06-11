@@ -10,6 +10,7 @@ Responsibilities:
   - Never leave temp files on disk even if processing crashes
 """
 from __future__ import annotations
+import asyncio
 from pathlib import Path
 import os
 import tempfile
@@ -23,9 +24,9 @@ from botocore.config import Config
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from app.core.config import settings
-from app.core.logging import get_logger
+# from app.core.logging import get_logger
 
-logger = get_logger(__name__)
+# logger = get_logger(__name__)
 
 # Retry config for transient S3 network errors
 _BOTO_CONFIG = Config(
@@ -125,12 +126,12 @@ def download_from_s3(s3_url: str, dest_path: str) -> int:
     key = extract_s3_key(s3_url)
     client = _get_s3_client()
 
-    logger.info(
-        "s3_download.started",
-        key=key,
-        dest=dest_path,
-        bucket=settings.AWS_S3_BUCKET,
-    )
+    # logger.info(
+    #     "s3_download.started",
+    #     key=key,
+    #     dest=dest_path,
+    #     bucket=settings.AWS_S3_BUCKET,
+    # )
 
     try:
         client.download_file(
@@ -154,7 +155,7 @@ def download_from_s3(s3_url: str, dest_path: str) -> int:
         os.unlink(dest_path)
         raise ValueError(f"Downloaded file is empty: {key}")
 
-    logger.info("s3_download.completed", key=key, size_bytes=size)
+    # logger.info("s3_download.completed", key=key, size_bytes=size)
     return size
 
 
@@ -172,7 +173,7 @@ def s3_file_as_temp(s3_url: str) -> Generator[Path, None, None]:
     tmp_path = Path(tmp_file.name)
     tmp_file.close()        # close handle so boto3 can write to it
 
-    logger.info("s3_temp.created", path=str(tmp_path), s3_url=s3_url[:80])
+    # logger.info("s3_temp.created", path=str(tmp_path), s3_url=s3_url[:80])
 
     try:
         # ── Pre-flight: check file size before downloading ────────
@@ -187,8 +188,9 @@ def s3_file_as_temp(s3_url: str) -> Generator[Path, None, None]:
         except (FileNotFoundError, PermissionError):
             raise
         except Exception as exc:
+            print(exc)
             # metadata check failure is non-fatal — proceed with download
-            logger.warning("s3_temp.metadata_check_failed", error=str(exc))
+            # logger.warning("s3_temp.metadata_check_failed", error=str(exc))
 
         # ── Download ──────────────────────────────────────────────
         download_from_s3(s3_url, str(tmp_path))
@@ -201,36 +203,54 @@ def s3_file_as_temp(s3_url: str) -> Generator[Path, None, None]:
         if tmp_path.exists():
             try:
                 tmp_path.unlink()
-                logger.info("s3_temp.cleaned", path=str(tmp_path))
+                # logger.info("s3_temp.cleaned", path=str(tmp_path))
             except OSError as exc:
+                print(exc)
                 # Log but don't raise — cleanup failure shouldn't
                 # mask the original processing error
-                logger.error(
-                    "s3_temp.cleanup_failed",
-                    path=str(tmp_path),
-                    error=str(exc),
-                )
+                # logger.error(
+                #     "s3_temp.cleanup_failed",
+                #     path=str(tmp_path),
+                #     error=str(exc),
+                # )
 
 
 # ─── High-Level: Download + Extract Text ──────────────────────────────────────
 
 
 
-def download_and_extract_text(s3_url: str) -> dict:
+import asyncio
+from pathlib import Path
 
+async def download_and_extract_text(s3_url: str) -> dict:   # ← async
     from app.services.file_service import FileServices
+    loop = asyncio.get_event_loop()
+    metadata = await loop.run_in_executor(None, get_s3_object_metadata, s3_url)
+    import tempfile, os
+    ext = _get_file_extension(s3_url)
+    tmp = tempfile.NamedTemporaryFile(suffix=ext, prefix="rag_s3_", delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
 
-    metadata = get_s3_object_metadata(s3_url)
-
-    with s3_file_as_temp(s3_url) as tmp_path:
-        text = FileServices.extract_text_from_pdf(tmp_path)
-
+    try:
+        await loop.run_in_executor(None, download_from_s3, s3_url, str(tmp_path))
+        text = await loop.run_in_executor(
+            None, FileServices.extract_text_from_pdf, tmp_path
+        )
+        page_count = await loop.run_in_executor(
+            None, FileServices.count_pages, tmp_path
+        )
         return {
-            "file_name": Path(s3_url.split("?")[0]).name,
-            "file_type": tmp_path.suffix.lower(),
-            "file_size": metadata["size_bytes"],
+            "file_name"   : Path(s3_url.split("?")[0]).name,
+            "file_type"   : tmp_path.suffix.lower(),
+            "file_size"   : metadata["size_bytes"],
             "content_type": metadata["content_type"],
-            "page_count": metadata.get("page_count", 0),
-            "content": text,
+            "page_count"  : page_count,
+            "etag"        : metadata["etag"],
+            "content"     : text,
         }
+
+    finally:
+        if tmp_path.exists():
+            os.unlink(tmp_path)
     

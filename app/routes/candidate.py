@@ -10,7 +10,7 @@ from app.services.candidate_service import CandidateService
 candidate_route = APIRouter()
 
 
-@candidate_route.post("/upload", response_model=CandidateOut, status_code=status.HTTP_201_CREATED)
+@candidate_route.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_candidate(
     payload: CandidateCreate,
     db: AsyncSession = Depends(get_db),

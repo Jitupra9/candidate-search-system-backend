@@ -32,8 +32,12 @@ async def register_user(db: AsyncSession, name: str, email: str, password: str) 
 async def login_user(db: AsyncSession, email: str, password: str) -> dict:
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-
-    if not user or not verify_password(password, user.password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not avilave",
+        )
+    if not verify_password(password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

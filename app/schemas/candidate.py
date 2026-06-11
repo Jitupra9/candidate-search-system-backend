@@ -6,25 +6,11 @@ from typing import Optional, List
 from app.models.candidates import CandidateStatus
 
 
-# ─── Base ────────────────────────────────────────────────────────────────────
-
-class CandidateBase(BaseModel):
-    name: str
-    email: EmailStr
-    phone: Optional[str] = None
-    location: Optional[str] = None
-    experience: Optional[float] = None
-    skills: Optional[List[str]] = Field(default_factory=list)
-    current_role: Optional[str] = None
-    expected_salary: Optional[str] = None
-    notice_period: Optional[int] = None
-    summary: Optional[str] = None
-    status:Optional[str] = None
 
 
 # ─── Insert (request) ────────────────────────────────────────────────────────
 
-class CandidateCreate(CandidateBase):
+class CandidateCreate(BaseModel):
     resume_file_url: Optional[str] = None
     uploaded_by: Optional[uuid.UUID] = None
 
@@ -42,7 +28,7 @@ class CandidateUpdate(BaseModel):
 
 # ─── Output (response) ───────────────────────────────────────────────────────
 
-class CandidateOut(CandidateBase):
+class CandidateOut(BaseModel):
     id: uuid.UUID
     candidate_id: str
     resume_file_url: Optional[str] = None
