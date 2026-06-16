@@ -13,6 +13,8 @@ from app.models.candidates import CandidateStatus
 class CandidateCreate(BaseModel):
     resume_file_url: Optional[str] = None
     uploaded_by: Optional[uuid.UUID] = None
+    provider:Optional[str] =None
+    model:Optional[str] = None
 
 
 # ─── Update ──────────────────────────────────────────────────────────────────

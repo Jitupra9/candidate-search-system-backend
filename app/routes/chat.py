@@ -1,79 +1,53 @@
-import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
 from app.core.db import get_db
-from app.core.security import  get_current_user
+from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas import ChatRequest, ChatResponse, ChatHistoryOut
-# from app.services.chat_servie import C
+from app.schemas.chat_history import ChatRequest
+from app.services.chat_servie import ChatService
+from app.llm import list_models as get_llm_models
 
 ask_api_router = APIRouter()
 
 
-@ask_api_router.post("/query")
-async def chat_query(
+@ask_api_router.post("/query/stream")
+async def chat_query_stream(
     payload: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Unified chat endpoint — streams SSE response.
-    Supports: document QA, candidate search, hybrid, job match.
+    Streaming RAG query — Server-Sent Events (SSE).
+
+    SSE event sequence:
+      data: {"type": "start",   "chat_id": "...", "query": "...", "provider": "...", "model": "...", "strategy": "..."}
+      data: {"type": "chunk",   "content": "word"}       ← one per LLM token
+      data: {"type": "sources", "source_chunks": [...], "sources_count": 5}
+      data: {"type": "done",    "chat_id": "..."}
+      data: {"type": "error",   "message": "..."}        ← only on failure
     """
-    async def event_stream():
-        pass
-#         try:
-#             async for chunk in ChatService.stream(
-#                 db=db,
-#                 chat_id=chat_id,
-#                 user_id=current_user.id,
-#                 payload=payload,
-#             ):
-#                 yield f"data: {chunk}\n\n"
-#         except Exception as e:
-#             yield f"event: error\ndata: {str(e)}\n\n"
-#         finally:
-#             yield "event: done\ndata: [DONE]\n\n"
-
-#     return StreamingResponse(
-#         event_stream(),
-#         media_type="text/event-stream",
-#         headers={
-#             "Cache-Control": "no-cache",
-#             "X-Accel-Buffering": "no",    
-#             "Connection": "keep-alive",
-#         },
-#     )
+    return StreamingResponse(
+        ChatService.ask_stream(
+            query=payload.query,
+            provider=payload.provider,
+            model=payload.model,
+            temperature=payload.temperature,
+            strategy=payload.strategy,
+            k=payload.k,
+            filters=payload.filters,
+            ensemble_weights=payload.ensemble_weights,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",      # disables nginx buffering
+            "Connection":       "keep-alive",
+        },
+    )
 
 
-# @ask_api_router.get("/history", response_model=List[ChatHistoryOut])
-# async def get_chat_history(
-#     db: AsyncSession = Depends(get_db),
-#     current_user: User = Depends(get_current_user),
-# ):
-#     return await ChatService.get_history(db=db, user_id=current_user.id)
-
-
-# @ask_api_router.get("/history/{chat_id}", response_model=ChatHistoryOut)
-# async def get_chat_by_id(
-#     chat_id: str,
-#     db: AsyncSession = Depends(get_db),
-#     current_user: User = Depends(get_current_user),
-# ):
-#     chat = await ChatService.get_by_chat_id(db=db, chat_id=chat_id)
-#     if not chat:
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     return chat
-
-
-# @ask_api_router.delete("/history/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
-# async def delete_chat(
-#     chat_id: str,
-#     db: AsyncSession = Depends(get_db),
-#     current_user: User = Depends(get_current_user),
-# ):
-#     deleted = await ChatService.delete(db=db, chat_id=chat_id)
-#     if not deleted:
-#         raise HTTPException(status_code=404, detail="Chat not found")
+@ask_api_router.get("/models")
+async def list_models(current_user: User = Depends(get_current_user)):
+    """List all available providers and their supported models."""
+    return {"ok": True, "data": get_llm_models()}

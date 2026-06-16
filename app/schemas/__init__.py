@@ -6,5 +6,4 @@ from .chat_history import (
     ChatHistoryUpdate,
     ChatHistoryOut,
     ChatRequest,
-    ChatResponse,
 )

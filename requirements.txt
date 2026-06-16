@@ -1,70 +1,82 @@
 # ============================================================
 #  Enterprise FastAPI — Full Requirements
-#  Python 3.11+   |   Updated: May 2026
+#  Python 3.11+  
 #  Install: pip install -r requirements.txt
 # ============================================================
 
 
 # ── CORE FRAMEWORK ──────────────────────────────────────────
-fastapi[standard]==0.124.4        # includes pydantic, starlette, fastapi-cli
-uvicorn[standard]==0.34.0         # ASGI server (dev)
+fastapi==0.115.6                  # includes pydantic, starlette, fastapi-cli
+uvicorn==0.32.1                   # ASGI server (dev)
 gunicorn==23.0.0                  # process manager (prod, wraps uvicorn workers)
-python-multipart==0.0.20          # multipart/form-data (file uploads)
+python-multipart==0.0.19          # multipart/form-data (file uploads)
 httpx==0.28.1                     # async HTTP client + test client
 
 
 # ── CONFIGURATION & SECRETS ─────────────────────────────────
-pydantic-settings==2.14.1         # BaseSettings — reads .env, type-safe config
-python-dotenv==1.1.0              # .env file loader (used by pydantic-settings)
+pydantic-settings==2.13.0         # BaseSettings — reads .env, type-safe config
+python-dotenv==1.0.1              # .env file loader (used by pydantic-settings)
 
 
 # ── DATABASE ────────────────────────────────────────────────
-SQLAlchemy[asyncio]==2.0.36       # ORM + async support
+SQLAlchemy==2.0.36                # ORM + async support
 asyncpg==0.30.0                   # async PostgreSQL driver (used by app + alembic)
 alembic==1.14.0                   # database migrations (configured for async)
+psycopg2-binary                   # sync PostgreSQL driver (used by Celery tasks)
 
 
 # ── CACHING ─────────────────────────────────────────────────
-redis[hiredis]==5.2.1             # async Redis client (asyncio support built-in)
+redis==7.1.1                      # async Redis client (asyncio support built-in)
 
 
 # ── SECURITY & AUTH ─────────────────────────────────────────
-bcrypt==4.0.1                     # password hashing
-passlib[bcrypt]==1.7.4            # password utility wrapper (uses bcrypt)
-python-jose[cryptography]==3.3.0  # JWT encode/decode
+bcrypt==4.2.1                     # password hashing
+passlib==1.7.4                    # password utility wrapper (uses bcrypt)
+python-jose==3.3.0                # JWT encode/decode
 slowapi==0.1.9                    # rate limiting for FastAPI/Starlette
 
 
 # ── BACKGROUND JOBS ─────────────────────────────────────────
-celery[redis]==5.5.3              # task queue (redis as broker + backend)
-celery[beat]==5.5.3               # cron scheduler (celery-beat)
+celery==5.6.2                     # task queue (redis as broker + backend) + beat scheduler
 flower==2.0.1                     # Celery monitoring UI
 
 
 # ── FILE STORAGE (AWS S3) ────────────────────────────────────
-aioboto3==13.3.0                  # async boto3 wrapper for S3
+aioboto3==15.5.0                  # async boto3 wrapper for S3
 
 
 # ── EMAIL ────────────────────────────────────────────────────
-Jinja2==3.1.5                     # HTML email templates
+Jinja2==3.1.6                     # HTML email templates
 aiosmtplib==3.0.2                 # async SMTP client
 
 
 # ── AI / ML ─────────────────────────────────────────────────
-# openai==1.82.0                    # OpenAI SDK (chat, embeddings, streaming)
-# pgvector==0.3.6                   # pgvector SQLAlchemy column type (vector search)
-# langchain==0.3.25                 # LangChain (optional — for chains/RAG/agents)
-# langchain-openai==0.3.17          # LangChain OpenAI integration
+openai==1.58.1                    # OpenAI SDK (chat, embeddings, streaming)
+anthropic                         # Anthropic Claude SDK
+groq                              # Groq SDK
+google-generativeai               # Gemini SDK
+langchain==0.3.25                 # LangChain (chains/RAG/agents)
+langchain-openai==0.3.16          # LangChain OpenAI integration
+langchain-ollama                  # LangChain Ollama integration
+langchain-community               # LangChain community loaders (PyMuPDF)
+langchain-text-splitters          # LangChain text splitters
+chromadb                          # ChromaDB vector store client
+pymupdf                           # PDF loader (PyMuPDF)
+pdfplumber                        # Tabular PDF extraction (tables)
+python-docx                       # DOCX/DOC Word document loader
+pandas                            # CSV and Excel processing
+openpyxl                          # Excel .xlsx read support (pandas backend)
+# pgvector==0.3.6                 # pgvector SQLAlchemy column type (vector search)
 
 
 # ── LOGGING & MONITORING ─────────────────────────────────────
 structlog==25.3.0                 # structured logging with JSON output
-sentry-sdk[fastapi]==2.25.1       # error tracking (FastAPI + Celery integrations)
+sentry-sdk==2.60.0                # error tracking (FastAPI + Celery integrations)
 prometheus-fastapi-instrumentator==7.1.0  # /metrics endpoint for Prometheus
 
 
 # ── TESTING ─────────────────────────────────────────────────
-pytest==8.3.5                     # test runner
+pytest==8.4.2                     # test runner
 pytest-asyncio==0.25.3            # async test support
 pytest-cov==6.1.0                 # coverage reports
 factory-boy==3.3.3                # test data factories (Factory Boy)

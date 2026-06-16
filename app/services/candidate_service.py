@@ -1,94 +1,74 @@
-
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException
-from app.models.candidates import Candidate
+from app.models.candidates import Candidate, CandidateStatus
 from app.schemas.response import ApiResponse
-from app.schemas.candidate import CandidateCreate, CandidateOut
-from app.services.s3_processor import download_and_extract_text
+from app.schemas.candidate import CandidateCreate, CandidateOut, CandidateUpdate
+from app.workers.candidate_tasks import process_candidate_resume
+
+
 class CandidateService:
+
     @staticmethod
-    async def upload(db: AsyncSession, payload: CandidateCreate):
-        try:
-            if not payload:
-                raise HTTPException(status_code=400, detail="No payload")
+    async def upload(db: AsyncSession, payload: CandidateCreate, uploaded_by: uuid.UUID):
+        if not payload.resume_file_url:
+            return ApiResponse.error(message="resume_file_url is required")
 
-            if not payload.resume_file_url:
-                return ApiResponse.error(message="resume_file_url is required")
-            document = await download_and_extract_text(payload.resume_file_url)
+        # 1. Create candidate row in PostgreSQL with status=processing
+        candidate = Candidate(
+            resume_file_url=payload.resume_file_url,
+            uploaded_by=uploaded_by,
+            status=CandidateStatus.processing,
+            # name/email/skills etc. will be filled by Celery task after LLM extraction
+        )
+        db.add(candidate)
+        await db.flush()   # get candidate.id without committing
 
-            return ApiResponse.success(data={
-                "file_name" : document["file_name"],
-                "page_count": document["page_count"],
-                "file_size" : document["file_size"],
-                "content"   : document["content"][:500],
-            })
+        # 2. Dispatch Celery task with the real candidate.id
+        task = process_candidate_resume.delay(
+            resume_url=payload.resume_file_url,
+            candidate_id=str(candidate.id),
+        )
 
-        except HTTPException:
-            raise
-        except FileNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except PermissionError as e:
-            raise HTTPException(status_code=403, detail=str(e))
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=str(e))
-        
+        return ApiResponse.success(
+            data={"task_id": task.id, "candidate_id": str(candidate.id), "status": "processing"},
+            message="Resume processing started",
+        )
 
+    @staticmethod
+    async def list_all(db: AsyncSession):
+        result = await db.execute(select(Candidate).order_by(Candidate.created_at.desc()))
+        candidates = result.scalars().all()
+        return ApiResponse.success(
+            data=[CandidateOut.model_validate(c) for c in candidates],
+            message="Candidates retrieved successfully",
+        )
 
+    @staticmethod
+    async def get_by_id(db: AsyncSession, candidate_id: str):
+        candidate = await db.get(Candidate, uuid.UUID(candidate_id))
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        return ApiResponse.success(data=CandidateOut.model_validate(candidate))
 
+    @staticmethod
+    async def delete(db: AsyncSession, candidate_id: str):
+        candidate = await db.get(Candidate, uuid.UUID(candidate_id))
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        await db.delete(candidate)
+        return ApiResponse.success(message="Candidate removed successfully")
 
-
-
-
-
-
-
-
-    async def list_all(db:AsyncSession):
-        try:
-            statement = select(Candidate)
-            result = db.execute(statement)
-            candidates = result.scalars().all()
-            return ApiResponse.success(data=candidates, message="Candidates retrieved successfully")
-        except Exception as e :
-            return HTTPException(status_code=500, detail="failed to retrieve candidates")
-    async def get_by_candidate_id(db:AsyncSession, candidate_id:str):
-        try:
-            candidate =  select(Candidate).where(Candidate.id == candidate_id)
-            result = db.execute(candidate)
-            return ApiResponse.success(data = result.scalar_one_or_none(),message="data fetch successfully")
-        except:
-            raise HTTPException(status_code=404,detail="candidate not find")
-    async def delete(db:AsyncSession, candidate_id:str):
-        try:
-            candidate = select(Candidate).where(Candidate.id == candidate_id)
-            result = db.execute(candidate)
-            candidate= result.scalar_one_or_none()
-            if candidate is None:
-                raise HTTPException(status_code=404, detail=" candidate not find")
-            db.delete(candidate)
-            db.commit()
-            return ApiResponse.success(message="candidate remove successfully")
-        except:
-            raise HTTPException(status_code=404, detail="failed to remove candidate")
-        
-    async def update(db:AsyncSession, candidate_id:str, payload:CandidateCreate):
-        try:
-            candidate = select(Candidate).where(Candidate.id == candidate_id)
-            result = db.execute(candidate)
-            candidate = result.scalar_one_or_none()
-            if candidate is None:
-                raise HTTPException(status_code=404, detail=" candidate not find")
-            for var, value in vars(payload).items():
-                if value is not None:
-                    setattr(candidate, var, value)
-            db.commit()
-            db.refresh(candidate)
-            return ApiResponse.success(data=CandidateOut.model_validate(candidate), message="candidate updated successfully")
-        except:
-            raise HTTPException(status_code=500, detail="failed to update candidate")
+    @staticmethod
+    async def update(db: AsyncSession, candidate_id: str, payload: CandidateUpdate):
+        candidate = await db.get(Candidate, uuid.UUID(candidate_id))
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        for field, value in payload.model_dump(exclude_none=True).items():
+            setattr(candidate, field, value)
+        await db.flush()
+        return ApiResponse.success(
+            data=CandidateOut.model_validate(candidate),
+            message="Candidate updated successfully",
+        )

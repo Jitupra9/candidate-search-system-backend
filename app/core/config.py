@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # ── JWT ───────────────────────────────────────────────────
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRES: int = 30      # minutes
-    JWT_REFRESH_TOKEN_EXPIRES: int = 720    # minutes (12 hours)
+    JWT_ACCESS_TOKEN_EXPIRES: int = os.getenv('JWT_ACCESS_TOKEN_EXPIRES')   # minutes
+    JWT_REFRESH_TOKEN_EXPIRES: int =os.getenv('JWT_REFRESH_TOKEN_EXPIRES')   # minutes (12 hours)
 
     # ── EMAIL ─────────────────────────────────────────────────
     SMTP_HOST: str
@@ -45,7 +45,13 @@ class Settings(BaseSettings):
     GEMINI_API_KEY    : str = ""
     GROQ_API_KEY      : str = ""
     OLLAMA_BASE_URL   : str = "http://localhost:11434"
-    DEFAULT_MODEL     : str = "openai/gpt-4o"
+    EMBEDDING_MODEL   : str = "nomic-embed-text"
+
+    # Default LLM — set in .env
+    # development : DEFAULT_PROVIDER=ollama  DEFAULT_MODEL=llama3.2
+    # production  : DEFAULT_PROVIDER=groq    DEFAULT_MODEL=llama-3.3-70b-versatile
+    DEFAULT_PROVIDER  : str = "ollama"
+    DEFAULT_MODEL     : str = "llama3.2"
 
     # ChromaDB
     CHROMA_HOST : str = "localhost"
