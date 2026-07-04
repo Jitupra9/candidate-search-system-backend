@@ -34,17 +34,6 @@ async def get_candidate(
 ):
     return await CandidateService.get_by_id(db=db, candidate_id=candidate_id)
 
-
-@candidate_route.patch("/{candidate_id}")
-async def update_candidate(
-    candidate_id: str,
-    payload: CandidateUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    return await CandidateService.update(db=db, candidate_id=candidate_id, payload=payload)
-
-
 @candidate_route.delete("/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_candidate(
     candidate_id: str,

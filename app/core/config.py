@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     )
 
     # ── APP ──────────────────────────────────────────────────
-    APP_NAME: str = "My FastAPI App"
-    APP_ENV: str = "development"
-    DEBUG: bool = False
+    APP_NAME: str
+    APP_ENV: str
+    DEBUG: bool = os.getenv('DEBUG')
     SECRET_KEY: str
     FRONTEND_URL: str = os.getenv('FRONTEND_URL')
 
@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str   = os.getenv('DATABASE_URL')   
 
     # ── REDIS ─────────────────────────────────────────────────
-    REDIS_URL: str
+    REDIS_URL: str = os.getenv('REDIS_URL') 
 
     # ── JWT ───────────────────────────────────────────────────
-    JWT_SECRET_KEY: str
-    JWT_ALGORITHM: str = "HS256"
+    JWT_SECRET_KEY: str = os.getenv('JWT_SECRET_KEY') 
+    JWT_ALGORITHM: str = os.getenv('JWT_ALGORITHM') 
     JWT_ACCESS_TOKEN_EXPIRES: int = os.getenv('JWT_ACCESS_TOKEN_EXPIRES')   # minutes
     JWT_REFRESH_TOKEN_EXPIRES: int =os.getenv('JWT_REFRESH_TOKEN_EXPIRES')   # minutes (12 hours)
 
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY    : str = ""
     ANTHROPIC_API_KEY : str = ""
-    GEMINI_API_KEY    : str = ""
+    GEMINI_API_KEY    : str = os.getenv('GEMINI_API_KEY')
     GROQ_API_KEY      : str = ""
     OLLAMA_BASE_URL   : str = "http://localhost:11434"
     EMBEDDING_MODEL   : str = "nomic-embed-text"
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # development : DEFAULT_PROVIDER=ollama  DEFAULT_MODEL=llama3.2
     # production  : DEFAULT_PROVIDER=groq    DEFAULT_MODEL=llama-3.3-70b-versatile
     DEFAULT_PROVIDER  : str = "ollama"
-    DEFAULT_MODEL     : str = "llama3.2"
+    DEFAULT_MODEL     : str = "tinyllama"
 
     # ChromaDB
     CHROMA_HOST : str = "localhost"

@@ -87,15 +87,21 @@ def extract_s3_key(s3_url: str) -> str:
 
 
 def _get_file_extension(s3_url: str) -> str:
-    """
-    Derive file extension from S3 URL.
-    Strips query params first (presigned URLs have ?X-Amz-... params).
-    Falls back to .tmp if unknown.
-    """
-    clean_url = s3_url.split("?")[0]
-    ext = Path(clean_url).suffix.lower()
-    return ext if ext in {".pdf", ".txt", ".doc", ".docx"} else ".tmp"
+    key = extract_s3_key(s3_url)
 
+    ext = Path(key).suffix.lower()
+
+    supported = {
+        ".pdf",
+        ".txt",
+        ".doc",
+        ".docx",
+        ".csv",
+        ".xls",
+        ".xlsx",
+    }
+
+    return ext if ext in supported else ".tmp"
 
 # ─── S3 File Metadata ─────────────────────────────────────────────────────────
 

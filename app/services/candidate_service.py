@@ -1,11 +1,15 @@
+import asyncio
+import logging
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.db import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException
-from app.models.candidates import Candidate, CandidateStatus
+from app.models.candidates import Candidate
 from app.schemas.response import ApiResponse
 from app.schemas.candidate import CandidateCreate, CandidateOut, CandidateUpdate
 from app.workers.candidate_tasks import process_candidate_resume
+from app.core.chroma_client import chroma
+logger = logging.getLogger(__name__)
 
 
 class CandidateService:
@@ -13,62 +17,56 @@ class CandidateService:
     @staticmethod
     async def upload(db: AsyncSession, payload: CandidateCreate, uploaded_by: uuid.UUID):
         if not payload.resume_file_url:
+            logger.warning("upload rejected — missing resume_file_url user_id=%s", uploaded_by)
             return ApiResponse.error(message="resume_file_url is required")
 
-        # 1. Create candidate row in PostgreSQL with status=processing
         candidate = Candidate(
             resume_file_url=payload.resume_file_url,
             uploaded_by=uploaded_by,
-            status=CandidateStatus.processing,
-            # name/email/skills etc. will be filled by Celery task after LLM extraction
         )
         db.add(candidate)
-        await db.flush()   # get candidate.id without committing
+        await db.flush()   
+        await db.commit()
 
-        # 2. Dispatch Celery task with the real candidate.id
         task = process_candidate_resume.delay(
             resume_url=payload.resume_file_url,
             candidate_id=str(candidate.id),
         )
 
         return ApiResponse.success(
-            data={"task_id": task.id, "candidate_id": str(candidate.id), "status": "processing"},
-            message="Resume processing started",
+            data={"candidate_id": str(candidate.id), "task_id": task.id},
+            message="Candidate uploaded successfully",
         )
 
     @staticmethod
     async def list_all(db: AsyncSession):
+        logger.debug("list_all candidates")
         result = await db.execute(select(Candidate).order_by(Candidate.created_at.desc()))
         candidates = result.scalars().all()
+        logger.debug("list_all — returned %d candidates", len(candidates))
         return ApiResponse.success(
             data=[CandidateOut.model_validate(c) for c in candidates],
             message="Candidates retrieved successfully",
         )
-
     @staticmethod
     async def get_by_id(db: AsyncSession, candidate_id: str):
+        logger.debug("get_by_id — candidate_id=%s", candidate_id)
         candidate = await db.get(Candidate, uuid.UUID(candidate_id))
         if not candidate:
+            logger.warning("get_by_id — not found: %s", candidate_id)
             raise HTTPException(status_code=404, detail="Candidate not found")
         return ApiResponse.success(data=CandidateOut.model_validate(candidate))
 
     @staticmethod
     async def delete(db: AsyncSession, candidate_id: str):
+        logger.debug("delete — candidate_id=%s", candidate_id)
         candidate = await db.get(Candidate, uuid.UUID(candidate_id))
         if not candidate:
+            logger.warning("delete — not found: %s", candidate_id)
             raise HTTPException(status_code=404, detail="Candidate not found")
         await db.delete(candidate)
+        await db.commit()
+        chroma.collection.delete(where={"candidate_id": candidate_id})
+        logger.info("deleted — candidate_id=%s", candidate_id)
         return ApiResponse.success(message="Candidate removed successfully")
 
-    @staticmethod
-    async def update(db: AsyncSession, candidate_id: str, payload: CandidateUpdate):
-        candidate = await db.get(Candidate, uuid.UUID(candidate_id))
-        if not candidate:
-            raise HTTPException(status_code=404, detail="Candidate not found")
-        for field, value in payload.model_dump(exclude_none=True).items():
-            setattr(candidate, field, value)
-        await db.flush()
-        return ApiResponse.success(
-            data=CandidateOut.model_validate(candidate),
-            message="Candidate updated successfully",
-        )

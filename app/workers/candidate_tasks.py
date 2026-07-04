@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import date
 import uuid
 from app.workers.celery_app import celery_app
 from app.services.s3_processor import s3_file_as_temp
@@ -10,105 +11,32 @@ from app.services.Embadding import EmbeddingService
 from app.core.chroma_client import chroma
 from app.core.config import settings
 from app.llm.prompts import RESUME_EXTRACTION_PROMPT
-
+from app.llm.providers import get_llm
+from app.schemas.candidate import CandidateExtraction
+from langchain_core.messages import SystemMessage, HumanMessage
+from app.services.candidate_utils import update_candidate_from_task
 logger = logging.getLogger(__name__)
 
 
 def _extract_candidate_data(resume_text: str) -> dict:
-    """
-    Call LLM synchronously to extract structured candidate data from resume text.
-    Returns dict matching Candidate model fields.
-    """
-    import anthropic, openai
-    from groq import Groq
-
-    provider = settings.DEFAULT_PROVIDER.lower()
-    model    = settings.DEFAULT_MODEL
-
+    provider = settings.DEFAULT_PROVIDER
+    model = settings.DEFAULT_MODEL
+    llm = get_llm(provider, model).with_structured_output(CandidateExtraction)
     messages = [
-        {"role": "system", "content": RESUME_EXTRACTION_PROMPT["system"]},
-        {"role": "user",   "content": RESUME_EXTRACTION_PROMPT["user"].format(resume_text=resume_text[:6000])},
-    ]
-
-    if provider == "ollama":
-        client = openai.OpenAI(base_url=f"{settings.OLLAMA_BASE_URL}/v1", api_key="ollama")
-        resp   = client.chat.completions.create(model=model, messages=messages, temperature=0.0)
-        raw    = resp.choices[0].message.content
-
-    elif provider == "groq":
-        client = Groq(api_key=settings.GROQ_API_KEY)
-        resp   = client.chat.completions.create(model=model, messages=messages, temperature=0.0)
-        raw    = resp.choices[0].message.content
-
-    elif provider == "openai":
-        client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-        resp   = client.chat.completions.create(model=model, messages=messages, temperature=0.0)
-        raw    = resp.choices[0].message.content
-
-    elif provider == "anthropic":
-        client  = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        system  = messages[0]["content"]
-        resp    = client.messages.create(model=model, max_tokens=1024, system=system,
-                                         messages=messages[1:], temperature=0.0)
-        raw     = resp.content[0].text
-    else:
-        raise ValueError(f"Unsupported provider for extraction: {provider}")
-
-    cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    return json.loads(cleaned)
-
-
-def _update_candidate_in_db(candidate_id: str, data: dict, status: str):
-    """Update candidate row in PostgreSQL synchronously using psycopg2."""
-    import psycopg2
-    from urllib.parse import urlparse
-
-    # Parse asyncpg URL → convert to psycopg2 format
-    db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-    parsed = urlparse(db_url)
-
-    conn = psycopg2.connect(
-        host=parsed.hostname,
-        port=parsed.port or 5432,
-        dbname=parsed.path.lstrip("/"),
-        user=parsed.username,
-        password=parsed.password,
-    )
-    cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE candidates SET
-            name            = %s,
-            email           = %s,
-            phone           = %s,
-            location        = %s,
-            current_role    = %s,
-            experience      = %s,
-            skills          = %s,
-            expected_salary = %s,
-            notice_period   = %s,
-            summary         = %s,
-            status          = %s
-        WHERE id = %s
-        """,
-        (
-            data.get("name"),
-            data.get("email"),
-            data.get("phone"),
-            data.get("location"),
-            data.get("current_role"),
-            data.get("experience"),
-            data.get("skills") or [],
-            data.get("expected_salary"),
-            data.get("notice_period"),
-            data.get("summary"),
-            status,
-            candidate_id,
+        SystemMessage(
+            content=RESUME_EXTRACTION_PROMPT["system"].format(today=date.today().isoformat())
         ),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+        HumanMessage(
+            content=RESUME_EXTRACTION_PROMPT["user"].format(
+                resume_text=resume_text
+            )
+        ),
+    ]
+    response = llm.invoke(messages)
+    return response
+
+
+
 
 
 @celery_app.task(bind=True, name="process_candidate_resume", max_retries=2)
@@ -127,7 +55,7 @@ def process_candidate_resume(self, resume_url: str, candidate_id: str):
 
         # ── 1 & 2: Download + Load ────────────────────────────────────────────
         with s3_file_as_temp(resume_url) as tmp_path:
-            loaded_docs = asyncio.run(document_Loader(str(tmp_path)))
+            loaded_docs = document_Loader(str(tmp_path))
 
         # ── 3: Chunk ──────────────────────────────────────────────────────────
         chunks = DocumentSpliter.parent_child_spliter(loaded_docs)
@@ -136,10 +64,18 @@ def process_candidate_resume(self, resume_url: str, candidate_id: str):
 
         # ── 4: Embed + Store in ChromaDB ──────────────────────────────────────
         embedder = EmbeddingService()
-        ids, embeddings, docs, metas = [], [], [], []
+        texts = [chunk.page_content for chunk in chunks]
 
-        for chunk in chunks:
-            vector = embedder.get_vector(chunk.page_content)
+        # Batch embedding instead of one call per chunk — much faster for
+        # resumes with dozens of chunks. Falls back to per-item calls if the
+        # embedder doesn't support batching.
+        if hasattr(embedder, "get_vectors"):
+            vectors = embedder.get_vectors(texts)
+        else:
+            vectors = [embedder.get_vector(t) for t in texts]
+
+        ids, embeddings, docs, metas = [], [], [], []
+        for chunk, vector in zip(chunks, vectors):
             ids.append(str(uuid.uuid4()))
             embeddings.append(vector)
             docs.append(chunk.page_content)
@@ -157,15 +93,17 @@ def process_candidate_resume(self, resume_url: str, candidate_id: str):
         # ── 5: LLM extracts structured candidate data from full resume text ───
         full_text = " ".join(doc.page_content for doc in loaded_docs)
         extracted = _extract_candidate_data(full_text)
-        logger.info("Extracted candidate data: %s", extracted.get("name"))
+        # logger.info("Extracted candidate data: %s", extracted.get("name"))
 
         # ── 6: Update PostgreSQL candidate row ────────────────────────────────
-        _update_candidate_in_db(candidate_id, extracted, status="done")
+        update_candidate_from_task(candidate_id, extracted, status="done")
         logger.info("Candidate %s updated in PostgreSQL — status=done", candidate_id)
 
         return {"candidate_id": candidate_id, "chunks": len(ids), "status": "done"}
 
     except Exception as e:
         logger.error("Failed candidate=%s: %s", candidate_id, e)
-        _update_candidate_in_db(candidate_id, {}, status="failed")
+        if self.request.retries >= self.max_retries:
+            update_candidate_from_task(candidate_id, None, status="failed")
+            logger.error("Candidate %s permanently failed after %d retries", candidate_id, self.request.retries)
         raise self.retry(exc=e, countdown=10)

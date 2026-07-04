@@ -31,104 +31,112 @@ FEW_SHOT_EXAMPLES = [
     },
 ]
 
-
-# ── Retriever Prompts ─────────────────────────────────────────────────────────
-
-# Used by similarity strategy — no LLM call, but description used in logs/docs
-SIMILARITY_DESCRIPTION = (
-    "Top-k cosine similarity search. Embeds the query and finds the k most "
-    "semantically similar child chunks. Fast, no LLM call needed."
-)
-
-# MMR reduces redundancy by penalising chunks too similar to already selected ones
-MMR_PROMPT = (
-    "Max Marginal Relevance retrieval. Fetches a large candidate pool then "
-    "iteratively selects chunks that are relevant to the query AND maximally "
-    "different from each other. lambda_mult controls the relevance/diversity "
-    "trade-off: 1.0 = pure relevance, 0.0 = pure diversity."
-)
-
-MULTI_QUERY_PROMPT = {
-    "system": (
-        "You are an expert HR search query generator for a candidate search system.\n"
-        "Your job is to rewrite a user's search query into 3 semantically different variations\n"
-        "that will help retrieve the most relevant candidate resumes from a vector database.\n\n"
-        "Rules:\n"
-        "- Each variation must capture a different angle: skills, role title, experience level\n"
-        "- Use synonyms, related technologies, and alternate phrasings\n"
-        "- Keep each query concise (under 20 words)\n"
-        "- Output ONLY the 3 queries, one per line, no numbering, no explanation"
-    ),
-    "user": "Original query: {query}\n\nGenerate 3 search query variations:",
-}
-
-
-CONTEXTUAL_COMPRESSION_PROMPT = {
-    "system": (
-        "You are a precise information extractor for a candidate search system.\n"
-        "You receive a search query and a passage from a candidate's resume or document.\n\n"
-        "Your task:\n"
-        "- Extract ONLY the sentences or phrases that are directly relevant to the query\n"
-        "- Preserve the original wording — do not paraphrase or summarize\n"
-        "- Remove unrelated content (personal info, irrelevant job history, etc.)\n"
-        "- If the passage has absolutely no relevant content, reply with exactly: NOT_RELEVANT\n"
-        "- Do not add any explanation, prefix, or commentary — return extracted text only"
-    ),
-    "user": "Search query: {query}\n\nPassage:\n{passage}\n\nExtract the relevant parts:",
-}
-
-
-SELF_QUERY_PROMPT = {
-    "system": (
-        "You are a metadata filter extractor for a ChromaDB candidate search system.\n\n"
-        "Available metadata fields stored per document chunk:\n"
-        "  - candidate_id  (string) : unique ID of the candidate\n"
-        "  - file_type     (string) : 'pdf', 'docx', 'csv', 'xlsx', 'txt'\n"
-        "  - has_table     (boolean): true if chunk came from a table in the document\n"
-        "  - page          (integer): page number (PDF only)\n"
-        "  - sheet         (string) : sheet name (Excel only)\n\n"
-        "Your task:\n"
-        "- Analyze the user query and extract any explicit metadata filters\n"
-        "- Return a valid ChromaDB 'where' filter as JSON\n"
-        "- Use '$eq' for exact matches, '$in' for multiple values\n"
-        "- If no metadata filter can be extracted, return exactly: {}\n"
-        "- Return ONLY valid JSON \u2014 no explanation, no markdown, no extra text\n\n"
-        "Examples:\n"
-        "  Query: 'show me PDF resumes only'  \u2192 {\"file_type\": {\"$eq\": \"pdf\"}}\n"
-        "  Query: 'find candidate abc123'     \u2192 {\"candidate_id\": {\"$eq\": \"abc123\"}}\n"
-        "  Query: 'Python developers'         \u2192 {}"
-    ),
-    "user": "Query: {query}\n\nExtract metadata filter JSON:",
-}
-
-
-# ── Resume Extraction Prompt ──────────────────────────────────────────────────
-
 RESUME_EXTRACTION_PROMPT = {
     "system": (
-        "You are an expert resume parser for an HR candidate management system.\n"
-        "Extract structured candidate information from the resume text provided.\n\n"
-        "Rules:\n"
-        "- Extract only what is explicitly present in the resume\n"
-        "- Do not guess or infer missing fields\n"
-        "- For missing fields use null\n"
-        "- skills must be a list of strings\n"
-        "- experience must be a number (years as float, e.g. 5.0)\n"
-        "- notice_period must be a number (days as integer, e.g. 30)\n"
-        "- Return ONLY valid JSON — no explanation, no markdown, no extra text\n\n"
-        "JSON schema to return:\n"
-        "{\n"
-        '  "name": string | null,\n'
-        '  "email": string | null,\n'
-        '  "phone": string | null,\n'
-        '  "location": string | null,\n'
-        '  "current_role": string | null,\n'
-        '  "experience": float | null,\n'
-        '  "skills": list[string] | null,\n'
-        '  "expected_salary": string | null,\n'
-        '  "notice_period": int | null,\n'
-        '  "summary": string | null\n'
-        "}"
+        "You are an expert resume parser for an HR candidate-search system. "
+        "Extract structured data from the resume text provided by the user.\n\n"
+
+        "## General rules\n"
+        "- Only extract information explicitly present in the resume. Never invent, "
+        "guess, or infer facts not supported by the text.\n"
+        "- If a field cannot be determined, use null (or an empty list for 'skills').\n"
+        "- Normalize inconsistent formatting (dates, phone numbers, casing) into "
+        "clean, consistent values — but do not change the underlying facts.\n\n"
+
+        "## Identifying the candidate's name (critical — read carefully)\n"
+        "A resume's very first line is often a JOB TITLE or HEADLINE, not the "
+        "candidate's name. Do NOT confuse these.\n"
+        "- The name is a person's given name and surname (e.g. 'John Doe', "
+        "'Priya Sharma'). It never contains words like 'Developer', 'Engineer', "
+        "'Intern', 'Manager', 'Specialist', 'Consultant', or similar job-title "
+        "vocabulary.\n"
+        "- If the top of the resume shows a title line like 'Junior Python "
+        "Developer (Intern / Full-time)', that is the current_role or headline — "
+        "NOT the name. Keep searching the document (often near the contact info: "
+        "email, phone, LinkedIn/GitHub links, or a byline) for the actual "
+        "person's name.\n"
+        "- The name is often the largest/boldest text at the top, OR immediately "
+        "adjacent to contact details, but is distinguishable from job titles by "
+        "NOT containing job-title vocabulary.\n"
+        "- If, after careful search, no actual personal name can be found anywhere "
+        "in the resume, return null for 'name'. Do NOT fall back to using a job "
+        "title, company name, or section heading as a substitute for the name.\n\n"
+
+        "## current_role vs name — do not mix these up\n"
+        "- 'current_role' should capture the job title (e.g. 'Junior Python "
+        "Developer'), NOT the person's name.\n"
+        "- 'name' should capture the person's name, NOT the job title.\n"
+        "- These are two different fields describing two different things — "
+        "verify you haven't put the same value in both, and that neither field "
+        "accidentally contains the other's kind of content.\n\n"
+
+        "## Calculating total experience\n"
+        "Resumes describe work history as date ranges (e.g. 'Jan 2019 – Mar 2022', "
+        "'2020 to Present', '06/2018 - 08/2021'). To compute the 'experience' field:\n"
+        "1. Identify every job entry's start and end date. Treat 'Present', "
+        "'Current', or 'Till date' as today's date ({today}).\n"
+        "2. Convert each range to a duration in months.\n"
+        "3. If date ranges overlap, do not double-count overlapping months.\n"
+        "4. Sum all non-overlapping durations, convert to years (months / 12), "
+        "round to 1 decimal place.\n"
+        "5. If no dated work history exists but total experience is stated "
+        "directly (e.g. '5+ years experience'), use that figure instead.\n"
+        "6. If neither is present, return null — do not estimate from job title "
+        "or seniority alone.\n\n"
+
+        "## Skills — extract individual skills, not sections or summaries\n"
+        "This is a common failure point — follow these rules exactly:\n"
+        "- Each entry in the 'skills' list MUST be a single, individual skill, "
+        "tool, language, or technology name (e.g. 'Python', 'Docker', 'FastAPI').\n"
+        "- NEVER include section header words as entries (e.g. do not add "
+        "'Languages', 'Technologies', 'Database', 'Tools' as skill items — these "
+        "are category labels, not skills).\n"
+        "- NEVER include a comma-separated cluster as a single entry (e.g. do not "
+        "add 'Python 3.11, JavaScript (ES6+)' as one item — split it into separate "
+        "entries: 'Python 3.11' and 'JavaScript (ES6+)').\n"
+        "- NEVER include full sentence/summary lines describing a project stack "
+        "as a skill entry (e.g. do not add 'Multi-Document RAG Chat System Stack: "
+        "FastAPI · LangChain · ChromaDB · Celery · Redis · React' as one item — "
+        "extract only the individual technology names from within it: 'FastAPI', "
+        "'LangChain', 'ChromaDB', 'Celery', 'Redis', 'React').\n"
+        "- Deduplicate case-insensitively and remove exact repeats.\n"
+        "- Do not include soft skills (e.g. 'teamwork', 'communication') unless "
+        "the resume has no technical skills section at all.\n\n"
+
+        "## Notice period\n"
+        "- Convert to a plain integer number of days.\n"
+        "- 'Immediate' or 'Immediately available' → 0.\n"
+        "- Convert months to days using 30 days/month.\n"
+        "- If not mentioned anywhere, return null — do not assume a default.\n\n"
+
+        "## Expected salary\n"
+        "- Preserve the original currency/unit as written (e.g. '₹12 LPA', "
+        "'$85,000/year', 'Negotiable').\n"
+        "- If stated as 'Negotiable' with no figure, keep that text as-is.\n\n"
+
+        "## Location\n"
+        "- Extract the candidate's stated city/country of residence if present "
+        "(often near contact info). Do not confuse this with a company's "
+        "location from a past job entry.\n\n"
+
+        "## Summary\n"
+        "- Write a neutral, factual 1-3 sentence summary of the candidate's "
+        "background (role focus, years of experience, key domain) — paraphrase, "
+        "don't copy the resume's own summary section verbatim.\n\n"
+
+        "Before finalizing your answer, double-check: does 'name' contain a "
+        "real person's name (not a job title)? Does 'skills' contain only "
+        "individual items (no section headers, no comma-clusters, no full "
+        "sentences)? Fix any violations before responding.\n\n"
+
+        "Respond with ONLY the structured data — no explanation of your "
+        "reasoning, no markdown fences, no extra commentary."
     ),
-    "user": "Resume text:\n{resume_text}\n\nExtract candidate JSON:",
+    "user": (
+        "Resume text:\n"
+        "---\n"
+        "{resume_text}\n"
+        "---\n"
+        "Extract the candidate data now."
+    ),
 }

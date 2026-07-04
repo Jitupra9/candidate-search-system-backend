@@ -15,8 +15,8 @@ class CandidateStatus(str, enum.Enum):
 
 class Candidate(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "candidates"
-    name: Mapped[str] = mapped_column(String(100))
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     location: Mapped[str | None] = mapped_column(String(150), nullable=True)
     experience: Mapped[float | None] = mapped_column(Float, nullable=True)

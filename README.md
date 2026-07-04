@@ -6,18 +6,18 @@ AI-powered candidate search backend with RAG (Retrieval Augmented Generation), m
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Framework | FastAPI + Uvicorn |
-| Database | PostgreSQL + SQLAlchemy 2.0 (async) |
-| Migrations | Alembic |
-| Vector Store | ChromaDB |
-| Embeddings | Ollama (nomic-embed-text) |
-| Background Jobs | Celery + Redis |
-| File Storage | AWS S3 (boto3) |
-| Auth | JWT (python-jose) + bcrypt |
-| LLM Providers | OpenAI, Anthropic, Groq, Ollama, Gemini |
-| Rate Limiting | SlowAPI |
+| Layer           | Technology                              |
+| --------------- | --------------------------------------- |
+| Framework       | FastAPI + Uvicorn                       |
+| Database        | PostgreSQL + SQLAlchemy 2.0 (async)     |
+| Migrations      | Alembic                                 |
+| Vector Store    | ChromaDB                                |
+| Embeddings      | Ollama (nomic-embed-text)               |
+| Background Jobs | Celery + Redis                          |
+| File Storage    | AWS S3 (boto3)                          |
+| Auth            | JWT (python-jose) + bcrypt              |
+| LLM Providers   | OpenAI, Anthropic, Groq, Ollama, Gemini |
+| Rate Limiting   | SlowAPI                                 |
 
 ---
 
@@ -114,12 +114,14 @@ cd candidate-search-system-backend
 ### 2. Create virtual environment
 
 **Windows:**
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 ```
 
 **Linux/Mac:**
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -220,13 +222,13 @@ alembic revision --autogenerate -m "describe_your_change"
 alembic upgrade head
 ```
 
-| Command | Description |
-|---|---|
+| Command                | Description                  |
+| ---------------------- | ---------------------------- |
 | `alembic upgrade head` | Apply all pending migrations |
-| `alembic upgrade +1` | Apply next migration only |
-| `alembic downgrade -1` | Revert last migration |
-| `alembic history` | Show migration history |
-| `alembic current` | Show current applied version |
+| `alembic upgrade +1`   | Apply next migration only    |
+| `alembic downgrade -1` | Revert last migration        |
+| `alembic history`      | Show migration history       |
+| `alembic current`      | Show current applied version |
 
 ---
 
@@ -235,17 +237,20 @@ alembic upgrade head
 ### Start all required services first
 
 **ChromaDB:**
+
 ```bash
 chroma run --host localhost --port 8000
 ```
 
 **Ollama (embeddings):**
+
 ```bash
 ollama serve
 ollama pull nomic-embed-text
 ```
 
 **Redis:**
+
 ```bash
 # Windows
 redis-server
@@ -255,8 +260,9 @@ redis-server /etc/redis/redis.conf
 ```
 
 **Celery worker (background jobs):**
+
 ```bash
-celery -A app.workers.celery_app worker --loglevel=info
+celery -A app.workers.celery_app worker --pool=solo --loglevel=info
 ```
 
 ### Start the API server
@@ -274,19 +280,21 @@ Interactive API docs: `http://localhost:8000/docs`
 ## API Reference
 
 All protected endpoints require:
+
 ```http
 Authorization: Bearer <access_token>
 ```
 
 ### Auth
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/v1/auth/register` | Register new user |
-| POST | `/api/v1/auth/login` | Login, returns access + refresh tokens |
-| GET | `/api/v1/auth/me` | Get current user info |
+| Method | Endpoint                | Description                            |
+| ------ | ----------------------- | -------------------------------------- |
+| POST   | `/api/v1/auth/register` | Register new user                      |
+| POST   | `/api/v1/auth/login`    | Login, returns access + refresh tokens |
+| GET    | `/api/v1/auth/me`       | Get current user info                  |
 
 **Register:**
+
 ```json
 POST /api/v1/auth/register
 {
@@ -297,6 +305,7 @@ POST /api/v1/auth/register
 ```
 
 **Login:**
+
 ```json
 POST /api/v1/auth/login
 {
@@ -309,15 +318,16 @@ POST /api/v1/auth/login
 
 ### Candidates
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/v1/candidates/upload` | Upload resume URL — triggers background processing |
-| GET | `/api/v1/candidates/` | List all candidates |
-| GET | `/api/v1/candidates/{id}` | Get candidate by ID |
-| PATCH | `/api/v1/candidates/{id}` | Update candidate |
-| DELETE | `/api/v1/candidates/{id}` | Delete candidate |
+| Method | Endpoint                    | Description                                        |
+| ------ | --------------------------- | -------------------------------------------------- |
+| POST   | `/api/v1/candidates/upload` | Upload resume URL — triggers background processing |
+| GET    | `/api/v1/candidates/`       | List all candidates                                |
+| GET    | `/api/v1/candidates/{id}`   | Get candidate by ID                                |
+| PATCH  | `/api/v1/candidates/{id}`   | Update candidate                                   |
+| DELETE | `/api/v1/candidates/{id}`   | Delete candidate                                   |
 
 **Upload candidate resume:**
+
 ```json
 POST /api/v1/candidates/upload
 {
@@ -327,6 +337,7 @@ POST /api/v1/candidates/upload
 ```
 
 Response:
+
 ```json
 {
   "ok": true,
@@ -339,6 +350,7 @@ Response:
 ```
 
 The Celery worker will:
+
 1. Download file from S3
 2. Detect file type and load document
 3. Split into parent-child chunks
@@ -349,12 +361,13 @@ The Celery worker will:
 
 ### Chat
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/v1/chat/query/stream` | SSE streaming response |
-| GET  | `/api/v1/chat/models`        | List all available providers and models |
+| Method | Endpoint                    | Description                             |
+| ------ | --------------------------- | --------------------------------------- |
+| POST   | `/api/v1/chat/query/stream` | SSE streaming response                  |
+| GET    | `/api/v1/chat/models`       | List all available providers and models |
 
 **Request body:**
+
 ```json
 {
   "query": "Find Python developers with 5+ years experience in Bangalore",
@@ -370,26 +383,26 @@ The Celery worker will:
 
 **Retrieval strategies:**
 
-| Strategy | Description |
-|---|---|
-| `pipeline` | **Recommended** — multi-query → similarity pool → MMR → contextual compression |
-| `similarity` | Top-k cosine similarity — fast, single query |
-| `mmr` | Max Marginal Relevance — diverse, reduces redundancy |
-| `multi_query` | LLM generates 3 query variants, merges results |
-| `contextual` | LLM trims irrelevant parts from passages |
-| `self_query` | LLM extracts metadata filters from natural language |
-| `hybrid_bm25` | BM25 keyword + dense vector RRF fusion |
-| `ensemble` | Weighted merge of similarity + MMR |
+| Strategy      | Description                                                                    |
+| ------------- | ------------------------------------------------------------------------------ |
+| `pipeline`    | **Recommended** — multi-query → similarity pool → MMR → contextual compression |
+| `similarity`  | Top-k cosine similarity — fast, single query                                   |
+| `mmr`         | Max Marginal Relevance — diverse, reduces redundancy                           |
+| `multi_query` | LLM generates 3 query variants, merges results                                 |
+| `contextual`  | LLM trims irrelevant parts from passages                                       |
+| `self_query`  | LLM extracts metadata filters from natural language                            |
+| `hybrid_bm25` | BM25 keyword + dense vector RRF fusion                                         |
+| `ensemble`    | Weighted merge of similarity + MMR                                             |
 
 **Available providers and models:**
 
-| Provider | Models |
-|---|---|
-| `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` |
-| `anthropic` | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307` |
-| `groq` | `llama-3.3-70b-versatile`, `mixtral-8x7b-32768`, `gemma2-9b-it` |
-| `ollama` | `llama3.2`, `mistral`, `phi3` |
-| `gemini` | `gemini-1.5-pro`, `gemini-1.5-flash` |
+| Provider    | Models                                                          |
+| ----------- | --------------------------------------------------------------- |
+| `openai`    | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo`                        |
+| `anthropic` | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307`         |
+| `groq`      | `llama-3.3-70b-versatile`, `mixtral-8x7b-32768`, `gemma2-9b-it` |
+| `ollama`    | `llama3.2`, `mistral`, `phi3`                                   |
+| `gemini`    | `gemini-1.5-pro`, `gemini-1.5-flash`                            |
 
 ---
 
@@ -413,27 +426,31 @@ data: {"type": "error",   "message": "..."}  ← only on failure
 ```
 
 **Frontend consumption:**
-```javascript
-const res = await fetch('/api/v1/chat/query/stream', {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload),
-})
 
-const reader = res.body.getReader()
-const decoder = new TextDecoder()
+```javascript
+const res = await fetch("/api/v1/chat/query/stream", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(payload),
+});
+
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
 
 while (true) {
-  const { done, value } = await reader.read()
-  if (done) break
-  const lines = decoder.decode(value).split('\n\n')
+  const { done, value } = await reader.read();
+  if (done) break;
+  const lines = decoder.decode(value).split("\n\n");
   for (const line of lines) {
-    if (!line.startsWith('data:')) continue
-    const event = JSON.parse(line.replace('data: ', ''))
-    if (event.type === 'start')   initChatBubble(event.chat_id)
-    if (event.type === 'chunk')   appendToken(event.content)
-    if (event.type === 'sources') renderSources(event.source_chunks)
-    if (event.type === 'done')    markComplete()
+    if (!line.startsWith("data:")) continue;
+    const event = JSON.parse(line.replace("data: ", ""));
+    if (event.type === "start") initChatBubble(event.chat_id);
+    if (event.type === "chunk") appendToken(event.content);
+    if (event.type === "sources") renderSources(event.source_chunks);
+    if (event.type === "done") markComplete();
   }
 }
 ```
@@ -444,15 +461,15 @@ while (true) {
 
 Supported file types uploaded via S3:
 
-| Format | Loader | Notes |
-|---|---|---|
-| `.pdf` | pdfplumber + PyMuPDF | Auto-detects tables, falls back to plain text |
-| `.docx` | python-docx | Extracts paragraphs grouped by headings + tables |
-| `.doc` | python-docx | Same as docx |
-| `.csv` | pandas | Each row becomes a searchable document |
-| `.xlsx` | pandas | All sheets processed, each row is a document |
-| `.xls` | pandas | Same as xlsx |
-| `.txt` | built-in | Split on double newlines into paragraphs |
+| Format  | Loader               | Notes                                            |
+| ------- | -------------------- | ------------------------------------------------ |
+| `.pdf`  | pdfplumber + PyMuPDF | Auto-detects tables, falls back to plain text    |
+| `.docx` | python-docx          | Extracts paragraphs grouped by headings + tables |
+| `.doc`  | python-docx          | Same as docx                                     |
+| `.csv`  | pandas               | Each row becomes a searchable document           |
+| `.xlsx` | pandas               | All sheets processed, each row is a document     |
+| `.xls`  | pandas               | Same as xlsx                                     |
+| `.txt`  | built-in             | Split on double newlines into paragraphs         |
 
 ---
 
@@ -460,16 +477,16 @@ Supported file types uploaded via S3:
 
 The `app/llm/` module is the single place to make any LLM-related changes:
 
-| What you want to change | File to edit |
-|---|---|
-| Add a new LLM provider | `app/llm/providers.py` — add client factory + entry in `PROVIDER_MODELS` |
-| Add a model to existing provider | `app/llm/providers.py` — add to `PROVIDER_MODELS` dict only |
-| Change system prompt or tone | `app/llm/prompts.py` — edit `SYSTEM_PROMPT` |
-| Change few-shot examples | `app/llm/prompts.py` — edit `FEW_SHOT_EXAMPLES` |
-| Change multi-query retriever prompt | `app/llm/prompts.py` — edit `MULTI_QUERY_PROMPT` |
-| Change contextual compression prompt | `app/llm/prompts.py` — edit `CONTEXTUAL_COMPRESSION_PROMPT` |
-| Change self-query metadata prompt | `app/llm/prompts.py` — edit `SELF_QUERY_PROMPT` |
-| Change how LLM is called | `app/llm/caller.py` |
+| What you want to change              | File to edit                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| Add a new LLM provider               | `app/llm/providers.py` — add client factory + entry in `PROVIDER_MODELS` |
+| Add a model to existing provider     | `app/llm/providers.py` — add to `PROVIDER_MODELS` dict only              |
+| Change system prompt or tone         | `app/llm/prompts.py` — edit `SYSTEM_PROMPT`                              |
+| Change few-shot examples             | `app/llm/prompts.py` — edit `FEW_SHOT_EXAMPLES`                          |
+| Change multi-query retriever prompt  | `app/llm/prompts.py` — edit `MULTI_QUERY_PROMPT`                         |
+| Change contextual compression prompt | `app/llm/prompts.py` — edit `CONTEXTUAL_COMPRESSION_PROMPT`              |
+| Change self-query metadata prompt    | `app/llm/prompts.py` — edit `SELF_QUERY_PROMPT`                          |
+| Change how LLM is called             | `app/llm/caller.py`                                                      |
 
 ---
 
@@ -496,12 +513,14 @@ Document page/section
 ## Troubleshooting
 
 **ChromaDB connection refused**
+
 ```bash
 # Make sure ChromaDB server is running
 chroma run --host localhost --port 8000
 ```
 
 **Ollama embedding fails**
+
 ```bash
 # Make sure Ollama is running and model is pulled
 ollama serve
@@ -509,6 +528,7 @@ ollama pull nomic-embed-text
 ```
 
 **Celery task not running**
+
 ```bash
 # Check Redis is running
 redis-cli ping   # should return PONG
@@ -521,12 +541,14 @@ celery -A app.workers.celery_app flower
 ```
 
 **Database connection error**
+
 ```bash
 # Verify PostgreSQL is running and DATABASE_URL is correct
 psql -h localhost -U postgres -d ai
 ```
 
 **Migration conflicts**
+
 ```bash
 # Reset and reapply (development only)
 alembic downgrade base
@@ -534,5 +556,6 @@ alembic upgrade head
 ```
 
 **JWT token expired**
+
 - Access token expires after `JWT_ACCESS_TOKEN_EXPIRES` minutes (default: 120)
 - Re-login to get a new token

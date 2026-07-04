@@ -11,6 +11,28 @@ from app.llm import list_models as get_llm_models
 ask_api_router = APIRouter()
 
 
+@ask_api_router.post("/query")
+async def chat_query(
+    payload: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Non-streaming RAG query — returns complete response at once.
+    Use this for testing. Use /query/stream for frontend production use.
+    """
+    return await ChatService.ask(
+        query=payload.query,
+        provider=payload.provider,
+        model=payload.model,
+        temperature=payload.temperature,
+        strategy=payload.strategy,
+        k=payload.k,
+        filters=payload.filters,
+        ensemble_weights=payload.ensemble_weights,
+    )
+
+
 @ask_api_router.post("/query/stream")
 async def chat_query_stream(
     payload: ChatRequest,

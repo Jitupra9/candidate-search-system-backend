@@ -1,13 +1,14 @@
+from app.core.logging import setup_logging
+setup_logging()   # must be first before any other import that uses logging
+
 from fastapi import FastAPI
 from app.core.config import settings
-from app.routes import api_router     
+from app.routes import api_router
 from app.core.limiter import limiter
 from app.core.middleware import register_middleware
 from app.core.exceptions import register_exception_handlers
-app = FastAPI(
-    title=settings.APP_NAME,
-    debug=settings.DEBUG,
-)
+
+app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 app.state.limiter = limiter
 register_middleware(app=app)
 register_exception_handlers(app)

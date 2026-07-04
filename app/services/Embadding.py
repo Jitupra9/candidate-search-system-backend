@@ -19,7 +19,7 @@ class EmbeddingService:
         return cls._instance
 
     def _init_model(self):
-        self.model = OllamaEmbeddings(
+        self.embeddings = OllamaEmbeddings(
             model=settings.EMBEDDING_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
         )
@@ -32,7 +32,7 @@ class EmbeddingService:
         last_error = None
         for attempt in range(3):
             try:
-                return self.model.embed_query(query)
+                return self.embeddings.embed_query(query)
             except Exception as e:
                 last_error = e
                 logger.warning("Embedding attempt %d failed: %s", attempt + 1, e)
