@@ -57,8 +57,8 @@ def process_candidate_resume(self, resume_url: str, candidate_id: str):
         with s3_file_as_temp(resume_url) as tmp_path:
             loaded_docs = document_Loader(str(tmp_path))
 
-        # ── 3: Chunk ──────────────────────────────────────────────────────────
-        chunks = DocumentSpliter.parent_child_spliter(loaded_docs)
+        # ── 3: Prepare chunks (auto: short resume = 1 chunk, long CV = split) ──
+        chunks = DocumentSpliter.smart_split(loaded_docs)
         if not chunks:
             raise ValueError("No chunks generated from document")
 
@@ -66,9 +66,6 @@ def process_candidate_resume(self, resume_url: str, candidate_id: str):
         embedder = EmbeddingService()
         texts = [chunk.page_content for chunk in chunks]
 
-        # Batch embedding instead of one call per chunk — much faster for
-        # resumes with dozens of chunks. Falls back to per-item calls if the
-        # embedder doesn't support batching.
         if hasattr(embedder, "get_vectors"):
             vectors = embedder.get_vectors(texts)
         else:
@@ -80,11 +77,11 @@ def process_candidate_resume(self, resume_url: str, candidate_id: str):
             embeddings.append(vector)
             docs.append(chunk.page_content)
             metas.append({
-                "candidate_id":   candidate_id,
-                "parent_index":   chunk.metadata["parent_index"],
-                "parent_content": chunk.metadata["parent_content"],
-                "file_type":      chunk.metadata.get("file_type", ""),
-                "resume_url":     resume_url,
+                "candidate_id":  candidate_id,
+                "content_index": chunk.metadata["content_index"],
+                "content":       chunk.metadata["content"],
+                "file_type":     chunk.metadata.get("file_type", ""),
+                "resume_url":    resume_url,
             })
 
         chroma.collection.upsert(ids=ids, embeddings=embeddings, documents=docs, metadatas=metas)
